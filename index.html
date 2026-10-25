@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Binary Addition Game</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+.shake{animation:shake .4s ease}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}
+.pop{animation:pop .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .3s ease forwards}
+.bit-col{min-width:2.5rem}
+.mono{font-family:'Courier New',Courier,monospace}
+</style>
+</head>
+<body class="bg-gradient-to-br from-slate-800 to-slate-900 min-h-screen text-white font-sans">
+<div class="max-w-2xl mx-auto px-4 py-8">
+  <div class="text-center mb-6">
+    <h1 class="text-3xl font-bold text-cyan-400 mb-1">Binary Addition</h1>
+    <p class="text-slate-400 text-sm">Type the binary sum as fast as you can</p>
+  </div>
+
+  <div class="flex justify-center gap-3 mb-6">
+    <button onclick="setBits(4)" id="btn4" class="px-4 py-2 rounded-lg text-sm font-bold bg-cyan-600 text-white shadow transition">4-bit</button>
+    <button onclick="setBits(8)" id="btn8" class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-700 text-slate-300 shadow transition">8-bit</button>
+    <button onclick="setBits(16)" id="btn16" class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-700 text-slate-300 shadow transition">16-bit</button>
+  </div>
+
+  <div class="grid grid-cols-3 gap-3 mb-5 text-center">
+    <div class="bg-slate-700 rounded-xl p-3">
+      <div class="text-2xl font-bold text-cyan-400" id="score">0</div>
+      <div class="text-xs text-slate-400">Score</div>
+    </div>
+    <div class="bg-slate-700 rounded-xl p-3">
+      <div class="text-2xl font-bold text-yellow-400" id="streak">0×</div>
+      <div class="text-xs text-slate-400">Streak</div>
+    </div>
+    <div class="bg-slate-700 rounded-xl p-3">
+      <div class="text-2xl font-bold text-emerald-400" id="timer">0.0s</div>
+      <div class="text-xs text-slate-400">Time</div>
+    </div>
+  </div>
+
+  <div class="bg-slate-700 rounded-2xl shadow-xl p-6 mb-4">
+    <div class="flex justify-between items-center mb-4 text-xs text-slate-400">
+      <span>Correct: <span class="text-green-400 font-bold" id="correct">0</span></span>
+      <span>Wrong: <span class="text-red-400 font-bold" id="wrong">0</span></span>
+      <span>Best: <span class="text-yellow-400 font-bold" id="best">—</span></span>
+    </div>
+
+    <div class="mono text-right mb-2">
+      <div class="text-slate-400 text-xs mb-1 text-left">Addend A:</div>
+      <div class="text-2xl font-bold text-white tracking-widest" id="numA" aria-label="First binary number"></div>
+    </div>
+    <div class="mono text-right mb-1">
+      <div class="text-slate-400 text-xs mb-1 text-left">Addend B:</div>
+      <div class="text-2xl font-bold text-white tracking-widest" id="numB" aria-label="Second binary number"></div>
+    </div>
+    <div class="border-t border-slate-500 my-3"></div>
+    <div class="text-slate-400 text-xs mb-2">Your binary sum:</div>
+
+    <div class="flex gap-2 items-center">
+      <input type="text" id="answerInput" aria-label="Enter binary sum"
+        class="flex-1 mono bg-slate-800 border-2 border-slate-500 rounded-xl py-3 px-4 text-xl font-bold text-cyan-300 tracking-widest focus:outline-none focus:border-cyan-400 transition text-right"
+        placeholder="0 or 1 only" inputmode="numeric" autocomplete="off" spellcheck="false"
+        onkeydown="if(event.key==='Enter')checkAnswer()" oninput="validateInput(this)">
+      <button onclick="checkAnswer()" class="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold shadow transition text-sm">Check</button>
+    </div>
+
+    <div id="feedback" class="mt-3 text-center text-sm font-semibold h-5"></div>
+  </div>
+
+  <div id="stepThrough" class="hidden bg-slate-700 rounded-2xl p-4 mb-4 fade-in">
+    <div class="text-xs text-slate-400 mb-2 font-semibold uppercase tracking-wider">Step-by-step addition</div>
+    <div id="stepContent" class="mono text-sm overflow-x-auto"></div>
+  </div>
+
+  <div class="text-center mt-2">
+    <button onclick="newQuestion()" class="px-6 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-xl font-bold text-sm transition">New Question</button>
+    <button onclick="resetGame()" class="ml-3 px-6 py-2 bg-slate-700 hover:bg-red-700 text-slate-300 hover:text-white rounded-xl font-bold text-sm transition">Reset</button>
+  </div>
+</div>
+
+<script>
+let bits=4,a=0,b=0,startTime=null,timerInterval=null,streakCount=0,scoreVal=0,correctCount=0,wrongCount=0;
+let highScores=JSON.parse(localStorage.getItem('binGame_hs')||'{}');
+
+function setBits(n){
+  bits=n;
+  ['btn4','btn8','btn16'].forEach(id=>{document.getElementById(id).className='px-4 py-2 rounded-lg text-sm font-bold bg-slate-700 text-slate-300 shadow transition';});
+  document.getElementById('btn'+n).className='px-4 py-2 rounded-lg text-sm font-bold bg-cyan-600 text-white shadow transition';
+  updateBest();newQuestion();
+}
+
+function randBin(){
+  const max=(1<<bits)-1;
+  const v=Math.floor(Math.random()*max)+1;
+  return v;
+}
+
+function toBin(n){return n.toString(2).padStart(bits,'0');}
+
+function newQuestion(){
+  a=randBin();b=randBin();
+  while(a+b>=(1<<bits)){a=randBin();b=randBin();}
+  document.getElementById('numA').textContent=toBin(a);
+  document.getElementById('numB').textContent=toBin(b);
+  document.getElementById('answerInput').value='';
+  document.getElementById('answerInput').className='flex-1 mono bg-slate-800 border-2 border-slate-500 rounded-xl py-3 px-4 text-xl font-bold text-cyan-300 tracking-widest focus:outline-none focus:border-cyan-400 transition text-right';
+  document.getElementById('feedback').textContent='';
+  document.getElementById('feedback').className='mt-3 text-center text-sm font-semibold h-5';
+  document.getElementById('stepThrough').classList.add('hidden');
+  clearInterval(timerInterval);
+  startTime=Date.now();
+  timerInterval=setInterval(()=>{
+    document.getElementById('timer').textContent=((Date.now()-startTime)/1000).toFixed(1)+'s';
+  },100);
+  document.getElementById('answerInput').focus();
+}
+
+function validateInput(inp){
+  inp.value=inp.value.replace(/[^01]/g,'');
+  if(inp.value.length>bits+1)inp.value=inp.value.slice(0,bits+1);
+}
+
+function checkAnswer(){
+  const raw=document.getElementById('answerInput').value.trim();
+  if(!raw)return;
+  const elapsed=((Date.now()-startTime)/1000).toFixed(2);
+  clearInterval(timerInterval);
+  const userVal=parseInt(raw,2);
+  const correct=a+b;
+  const inp=document.getElementById('answerInput');
+  const fb=document.getElementById('feedback');
+  if(userVal===correct){
+    inp.className='flex-1 mono bg-slate-800 border-2 border-green-500 rounded-xl py-3 px-4 text-xl font-bold text-green-300 tracking-widest focus:outline-none transition text-right pop';
+    streakCount++;scoreVal+=10*Math.max(1,streakCount)*(bits/4);
+    correctCount++;
+    fb.textContent='✓ Correct! +'+Math.round(10*Math.max(1,streakCount)*(bits/4))+' pts in '+elapsed+'s';
+    fb.className='mt-3 text-center text-sm font-semibold text-green-400 h-5';
+    updateHS(elapsed);
+    document.getElementById('stepThrough').classList.add('hidden');
+    setTimeout(()=>newQuestion(),800);
+  } else {
+    inp.className='flex-1 mono bg-slate-800 border-2 border-red-500 rounded-xl py-3 px-4 text-xl font-bold text-red-300 tracking-widest focus:outline-none transition text-right shake';
+    streakCount=0;wrongCount++;
+    fb.textContent='✗ Wrong. Answer: '+toBin(correct);
+    fb.className='mt-3 text-center text-sm font-semibold text-red-400 h-5';
+    renderSteps();
+  }
+  updateDisplay();
+}
+
+function renderSteps(){
+  const binA=toBin(a),binB=toBin(b),binC=toBin(a+b);
+  let carries=Array(bits+1).fill(0);
+  let steps=[];
+  for(let i=bits-1;i>=0;i--){
+    const ba=parseInt(binA[i]),bb=parseInt(binB[i]),c=carries[i+1];
+    const sum=ba+bb+c;
+    carries[i]=Math.floor(sum/2);
+    steps.unshift({col:i,ba,bb,c,sum:sum%2,carry:carries[i]});
+  }
+  const cRow=Array(bits).fill('');
+  steps.forEach(s=>{if(s.c)cRow[s.col]='1';});
+  let html='<div class="text-slate-400 mb-1 text-right">'+padSpaces('carry:',8)+' '+cRow.join(' ')+'</div>';
+  html+='<div class="text-white mb-0.5 text-right">'+padSpaces('A:',8)+' '+binA.split('').join(' ')+'</div>';
+  html+='<div class="text-white mb-0.5 text-right">'+padSpaces('B:',8)+' '+binB.split('').join(' ')+'</div>';
+  html+='<div class="border-t border-slate-500 mb-1"></div>';
+  html+='<div class="text-cyan-300 text-right font-bold">'+padSpaces('sum:',8)+' '+binC.split('').join(' ')+'</div>';
+  html+='<div class="text-slate-400 text-xs mt-2 text-right">Decimal: '+a+' + '+b+' = '+(a+b)+'</div>';
+  document.getElementById('stepContent').innerHTML=html;
+  document.getElementById('stepThrough').classList.remove('hidden');
+}
+
+function padSpaces(s,n){return s.padStart(n,' ');}
+
+function updateDisplay(){
+  document.getElementById('score').textContent=Math.round(scoreVal);
+  document.getElementById('streak').textContent=streakCount+'×';
+  document.getElementById('correct').textContent=correctCount;
+  document.getElementById('wrong').textContent=wrongCount;
+}
+
+function updateHS(elapsed){
+  const k='hs_'+bits;
+  const prev=highScores[k];
+  if(!prev||parseFloat(elapsed)<parseFloat(prev)){highScores[k]=elapsed;localStorage.setItem('binGame_hs',JSON.stringify(highScores));updateBest();}
+}
+
+function updateBest(){
+  const k='hs_'+bits;
+  document.getElementById('best').textContent=highScores[k]?highScores[k]+'s':'—';
+}
+
+function resetGame(){scoreVal=0;streakCount=0;correctCount=0;wrongCount=0;updateDisplay();newQuestion();}
+
+setBits(4);
+</script>
+</body>
+</html>
